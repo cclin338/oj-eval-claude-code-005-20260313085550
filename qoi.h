@@ -76,7 +76,70 @@ bool QoiEncode(uint32_t width, uint32_t height, uint8_t channels, uint8_t colors
         b = QoiReadU8();
         if (channels == 4) a = QoiReadU8();
 
-        // TODO
+        // Check if pixel is same as previous (for RUN)
+        if (r == pre_r && g == pre_g && b == pre_b && a == pre_a) {
+            run++;
+            if (run == 62 || i == px_num - 1) {
+                // Write QOI_OP_RUN
+                QoiWriteU8(QOI_OP_RUN_TAG | (run - 1));
+                run = 0;
+            }
+        } else {
+            // Write pending run if any
+            if (run > 0) {
+                QoiWriteU8(QOI_OP_RUN_TAG | (run - 1));
+                run = 0;
+            }
+
+            // Calculate hash index
+            int index = QoiColorHash(r, g, b, a);
+
+            // Check if pixel matches history (QOI_OP_INDEX)
+            if (history[index][0] == r && history[index][1] == g &&
+                history[index][2] == b && history[index][3] == a) {
+                QoiWriteU8(QOI_OP_INDEX_TAG | index);
+            } else {
+                // Check if we can use QOI_OP_DIFF
+                int dr = r - pre_r;
+                int dg = g - pre_g;
+                int db = b - pre_b;
+
+                if (a == pre_a && dr >= -2 && dr <= 1 && dg >= -2 && dg <= 1 && db >= -2 && db <= 1) {
+                    // QOI_OP_DIFF
+                    QoiWriteU8(QOI_OP_DIFF_TAG | ((dr + 2) << 4) | ((dg + 2) << 2) | (db + 2));
+                } else {
+                    // Check if we can use QOI_OP_LUMA
+                    int dg_r = dr - dg;
+                    int dg_b = db - dg;
+
+                    if (a == pre_a && dg >= -32 && dg <= 31 && dg_r >= -8 && dg_r <= 7 && dg_b >= -8 && dg_b <= 7) {
+                        // QOI_OP_LUMA
+                        QoiWriteU8(QOI_OP_LUMA_TAG | (dg + 32));
+                        QoiWriteU8(((dg_r + 8) << 4) | (dg_b + 8));
+                    } else {
+                        // Use QOI_OP_RGB or QOI_OP_RGBA
+                        if (a == pre_a) {
+                            QoiWriteU8(QOI_OP_RGB_TAG);
+                            QoiWriteU8(r);
+                            QoiWriteU8(g);
+                            QoiWriteU8(b);
+                        } else {
+                            QoiWriteU8(QOI_OP_RGBA_TAG);
+                            QoiWriteU8(r);
+                            QoiWriteU8(g);
+                            QoiWriteU8(b);
+                            QoiWriteU8(a);
+                        }
+                    }
+                }
+            }
+
+            // Update history for this pixel (when not RUN)
+            history[index][0] = r;
+            history[index][1] = g;
+            history[index][2] = b;
+            history[index][3] = a;
+        }
 
         pre_r = r;
         pre_g = g;
@@ -118,11 +181,70 @@ bool QoiDecode(uint32_t &width, uint32_t &height, uint8_t &channels, uint8_t &co
     memset(history, 0, sizeof(history));
 
     uint8_t r, g, b, a;
+    r = 0u;
+    g = 0u;
+    b = 0u;
     a = 255u;
 
     for (int i = 0; i < px_num; ++i) {
+        // Check if we have a pending run
+        if (run > 0) {
+            run--;
+        } else {
+            // Read the next operation tag
+            uint8_t tag = QoiReadU8();
 
-        // TODO
+            if (tag == QOI_OP_RGB_TAG) {
+                // QOI_OP_RGB
+                r = QoiReadU8();
+                g = QoiReadU8();
+                b = QoiReadU8();
+            } else if (tag == QOI_OP_RGBA_TAG) {
+                // QOI_OP_RGBA
+                r = QoiReadU8();
+                g = QoiReadU8();
+                b = QoiReadU8();
+                a = QoiReadU8();
+            } else {
+                uint8_t op = tag & QOI_MASK_2;
+
+                if (op == QOI_OP_RUN_TAG) {
+                    // QOI_OP_RUN
+                    run = (tag & 0x3f);
+                } else if (op == QOI_OP_INDEX_TAG) {
+                    // QOI_OP_INDEX
+                    int index = tag & 0x3f;
+                    r = history[index][0];
+                    g = history[index][1];
+                    b = history[index][2];
+                    a = history[index][3];
+                } else if (op == QOI_OP_DIFF_TAG) {
+                    // QOI_OP_DIFF
+                    int dr = ((tag >> 4) & 0x03) - 2;
+                    int dg = ((tag >> 2) & 0x03) - 2;
+                    int db = (tag & 0x03) - 2;
+                    r += dr;
+                    g += dg;
+                    b += db;
+                } else if (op == QOI_OP_LUMA_TAG) {
+                    // QOI_OP_LUMA
+                    int dg = (tag & 0x3f) - 32;
+                    uint8_t byte2 = QoiReadU8();
+                    int dg_r = ((byte2 >> 4) & 0x0f) - 8;
+                    int dg_b = (byte2 & 0x0f) - 8;
+                    r += dg + dg_r;
+                    g += dg;
+                    b += dg + dg_b;
+                }
+            }
+
+            // Update history
+            int index = QoiColorHash(r, g, b, a);
+            history[index][0] = r;
+            history[index][1] = g;
+            history[index][2] = b;
+            history[index][3] = a;
+        }
 
         QoiWriteU8(r);
         QoiWriteU8(g);

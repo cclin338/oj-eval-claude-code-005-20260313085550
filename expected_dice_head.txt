@@ -1,0 +1,8 @@
+000000 71 6f 69 66 00 00 00 c8 00 00 00 96 04 00 00 fd  >qoif............<
+000010 fd fd fd fd fd fd fd fd fd e3 fe 20 20 ff fe 14  >...........  ...<
+000020 14 ff fe bd bd ff fe 9f 9f ff a4 84 21 fe e9 e9  >............!...<
+000030 ff fe ff ff ff c0 00 fd fd fc fe 2a 2a f0 fe 00  >...........**...<
+000040 00 e6 fe 7e 7e f7 fe 95 95 f9 42 9a 8d 9b 8c fe  >...~~.....B.....<
+000050 7e 7e f6 9a 8c fe 87 87 f3 fe a8 a8 f4 fe b7 b7  >~~..............<
+000060 f4 9a 8e fe                                      >....<
+000064
